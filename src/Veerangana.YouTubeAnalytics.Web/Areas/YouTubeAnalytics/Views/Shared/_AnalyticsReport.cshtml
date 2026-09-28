@@ -1,0 +1,178 @@
+@model AnalyticsReportViewModel
+@using System.Web.Helpers
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <section class="tool-panel analytics-message analytics-message--error" role="alert">
+        <span class="analytics-message__icon"><i class="fa fa-exclamation-circle" aria-hidden="true"></i></span>
+        <div>
+            <h2>Report unavailable</h2>
+            <p>@Model.ErrorMessage</p>
+            <a class="btn btn-primary js-preserve-filters" href="@Url.Action("Index", "Settings", new { area = "YouTubeAnalytics" })">
+                <i class="fa fa-database" aria-hidden="true"></i> Data sources
+            </a>
+        </div>
+    </section>
+}
+else if (!Model.HasData)
+{
+    <section class="tool-panel empty-state">
+        <span class="empty-state__icon"><i class="fa fa-bar-chart" aria-hidden="true"></i></span>
+        <h2>No analytics for this period</h2>
+        <p>@Model.EmptyMessage</p>
+        <a class="btn btn-primary" href="@Request.Path">Reset filters</a>
+    </section>
+}
+else
+{
+    <div class="analytics-report @Model.SectionCssClass">
+        <section class="kpi-grid" aria-label="Report indicators">
+            @foreach (MetricCardViewModel metric in Model.Metrics)
+            {
+                <article class="kpi-card">
+                    <div class="kpi-card__header">
+                        <span class="metric-icon @metric.AccentCssClass"><i class="@metric.IconCssClass" aria-hidden="true"></i></span>
+                        <span class="metric-menu" data-toggle="tooltip" title="@metric.Tooltip"><i class="fa fa-info-circle" aria-hidden="true"></i></span>
+                    </div>
+                    <span class="kpi-card__label">@metric.Label</span>
+                    <strong class="kpi-card__value">@metric.Value</strong>
+                    <span class="metric-change @metric.ComparisonCssClass">@metric.ComparisonText</span>
+                </article>
+            }
+        </section>
+
+        <section class="analytics-grid analytics-grid--primary">
+            <article class="tool-panel performance-panel">
+                <header class="tool-panel__header">
+                    <div>
+                        <span class="section-kicker">@Model.ChartKicker</span>
+                        <h2>@Model.ChartTitle</h2>
+                        <span class="panel-period">@Model.PeriodLabel</span>
+                    </div>
+                    <div class="panel-legend" aria-hidden="true">
+                        <span><i class="legend-dot legend-dot--primary"></i>@Model.PrimarySeriesLabel</span>
+                        <span><i class="legend-dot legend-dot--comparison"></i>@Model.SecondarySeriesLabel</span>
+                    </div>
+                </header>
+                @if (Model.ChartPoints.Count > 0)
+                {
+                    <div class="usage-chart">
+                        <canvas id="analytics-report-chart" aria-label="@Model.ChartTitle" role="img"></canvas>
+                    </div>
+                    <script type="application/json" id="analytics-report-data">@Html.Raw(Json.Encode(new {
+                        type = Model.ChartType,
+                        primaryLabel = Model.PrimarySeriesLabel,
+                        secondaryLabel = Model.SecondarySeriesLabel,
+                        points = Model.ChartPoints
+                    }))</script>
+                }
+                else
+                {
+                    <div class="panel-empty"><i class="fa fa-area-chart" aria-hidden="true"></i><span>@Model.EmptyMessage</span></div>
+                }
+            </article>
+
+            <aside class="tool-panel insight-panel">
+                <header class="tool-panel__header">
+                    <div>
+                        <span class="section-kicker">Analysis</span>
+                        <h2>What the data indicates</h2>
+                    </div>
+                    <span class="panel-badge">Automatic</span>
+                </header>
+                <div class="insight-list">
+                    @foreach (InsightViewModel insight in Model.Insights)
+                    {
+                        <article class="insight-item">
+                            <span class="insight-item__icon @insight.AccentCssClass"><i class="@insight.IconCssClass" aria-hidden="true"></i></span>
+                            <div>
+                                <h3>@insight.Title</h3>
+                                <p>@insight.Description</p>
+                            </div>
+                        </article>
+                    }
+                </div>
+            </aside>
+        </section>
+
+        <section class="tool-panel table-panel">
+            <header class="tool-panel__header">
+                <div>
+                    <span class="section-kicker">@Model.TableKicker</span>
+                    <h2>@Model.TableTitle</h2>
+                </div>
+                <span class="report-row-count">@Model.Rows.Count.ToString("N0") rows</span>
+            </header>
+            @if (Model.Rows.Count > 0)
+            {
+                <div class="table-responsive">
+                    <table class="analytics-table report-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">@Model.FirstColumnLabel</th>
+                                <th scope="col">@Model.Value1Label</th>
+                                <th scope="col">@Model.Value2Label</th>
+                                <th scope="col">@Model.Value3Label</th>
+                                <th scope="col">@Model.Value4Label</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (AnalyticsReportRowViewModel row in Model.Rows)
+                            {
+                                <tr>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(row.LinkUrl))
+                                        {
+                                            <a class="video-cell" href="@row.LinkUrl" target="_blank" rel="noopener noreferrer">
+                                                @RenderRowIdentity(row)
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <div class="video-cell report-identity">@RenderRowIdentity(row)</div>
+                                        }
+                                    </td>
+                                    <td>@row.Value1</td>
+                                    <td>@row.Value2</td>
+                                    <td>@row.Value3</td>
+                                    <td>@row.Value4</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="panel-empty panel-empty--compact"><i class="fa fa-filter" aria-hidden="true"></i><span>@Model.EmptyMessage</span></div>
+            }
+        </section>
+    </div>
+}
+
+@helper RenderRowIdentity(AnalyticsReportRowViewModel row)
+{
+    if (!string.IsNullOrWhiteSpace(row.ImageUrl))
+    {
+        <span class="video-thumbnail">
+            <img src="@row.ImageUrl" alt="" loading="lazy" />
+            @if (!string.IsNullOrWhiteSpace(row.Badge))
+            {
+                <small>@row.Badge</small>
+            }
+        </span>
+    }
+    else
+    {
+        <span class="report-identity__mark">@(string.IsNullOrWhiteSpace(row.Badge) ? row.Label.Substring(0, 1).ToUpperInvariant() : row.Badge)</span>
+    }
+    <span class="video-cell__copy">
+        <strong>@row.Label</strong>
+        <small>@row.Subtitle</small>
+    </span>
+}
+
+@section Scripts {
+    <script src="@Url.Content("~/Scripts/vendor/Chart.min.js")"></script>
+    <script src="@Url.Content("~/Scripts/analytics-report.js")"></script>
+}

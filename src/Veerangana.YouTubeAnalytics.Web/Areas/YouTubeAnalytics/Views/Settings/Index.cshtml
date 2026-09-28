@@ -1,0 +1,114 @@
+@model DashboardShellViewModel
+@{
+    DatabaseStatusViewModel database = Model.DatabaseStatus ?? new DatabaseStatusViewModel();
+    YouTubeConfigurationStatusViewModel youtube = Model.YouTubeConfigurationStatus ?? new YouTubeConfigurationStatusViewModel();
+}
+
+<section class="settings-grid">
+    <article class="tool-panel data-source-panel">
+        <header class="tool-panel__header">
+            <div>
+                <span class="section-kicker">Analytics store</span>
+                <h2>SQL Server</h2>
+            </div>
+            <span class="status-pill @(database.IsAvailable ? "is-connected" : "is-unavailable")">
+                <i class="fa @(database.IsAvailable ? "fa-check-circle" : "fa-exclamation-circle")" aria-hidden="true"></i>
+                @database.StatusMessage
+            </span>
+        </header>
+
+        <dl class="source-details">
+            <div>
+                <dt>Server</dt>
+                <dd>@database.ServerName</dd>
+            </div>
+            <div>
+                <dt>Database</dt>
+                <dd>@database.DatabaseName</dd>
+            </div>
+            <div>
+                <dt>Authentication</dt>
+                <dd>@database.AuthenticationMode</dd>
+            </div>
+            <div>
+                <dt>Last successful sync</dt>
+                <dd>@(database.LastSuccessfulSyncUtc.HasValue ? database.LastSuccessfulSyncUtc.Value.ToLocalTime().ToString("dd MMM yyyy, h:mm tt") : "Not synchronized")</dd>
+            </div>
+            <div>
+                <dt>Available history</dt>
+                <dd>@(database.OldestSyncedDate.HasValue && database.LatestSyncedDate.HasValue
+                    ? database.OldestSyncedDate.Value.ToString("dd MMM yyyy") + " - " + database.LatestSyncedDate.Value.ToString("dd MMM yyyy")
+                    : "Waiting for first sync")</dd>
+            </div>
+        </dl>
+
+        <div class="source-metrics">
+            <div>
+                <span>Indexed videos</span>
+                <strong>@database.VideoCount.ToString("N0")</strong>
+            </div>
+            <div>
+                <span>Stored analytics rows</span>
+                <strong>@database.SnapshotCount.ToString("N0")</strong>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(database.LastSyncError))
+        {
+            <p class="sync-error"><i class="fa fa-exclamation-circle" aria-hidden="true"></i> @database.LastSyncError</p>
+        }
+
+        <form action="@Url.Action("SyncNow", "Settings", new { area = "YouTubeAnalytics" })" method="post" class="sync-actions">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-primary" type="submit" @(database.IsSyncRunning ? "disabled" : null)>
+                <i class="fa @(database.IsSyncRunning ? "fa-refresh fa-spin" : "fa-cloud-download")" aria-hidden="true"></i>
+                @(database.IsSyncRunning ? "Sync in progress" : "Sync now")
+            </button>
+            <small>Scheduled every 6 hours. Dashboards read SQL Server only.</small>
+        </form>
+    </article>
+
+    <article class="tool-panel data-source-panel">
+        <header class="tool-panel__header">
+            <div>
+                <span class="section-kicker">Data provider</span>
+                <h2>YouTube APIs</h2>
+            </div>
+            <span class="status-pill @(youtube.IsAnalyticsReady ? "is-connected" : "is-pending")">
+                <i class="fa @(youtube.IsAnalyticsReady ? "fa-check-circle" : "fa-key")" aria-hidden="true"></i>
+                @(youtube.IsAnalyticsReady ? "Configured" : "Credentials required")
+            </span>
+        </header>
+
+        <div class="configuration-list">
+            <div>
+                <span class="configuration-icon"><i class="fa fa-database" aria-hidden="true"></i></span>
+                <span>
+                    <strong>YouTube Data API v3</strong>
+                    <small>@(youtube.HasChannelIdentity ? youtube.ChannelIdentity : "Channel identity required")</small>
+                </span>
+            </div>
+            <div>
+                <span class="configuration-icon"><i class="fa fa-line-chart" aria-hidden="true"></i></span>
+                <span>
+                    <strong>YouTube Analytics API</strong>
+                    <small>@(youtube.HasRefreshToken ? "Refresh token configured" : "Refresh token required")</small>
+                </span>
+            </div>
+            <div>
+                <span class="configuration-icon"><i class="fa fa-lock" aria-hidden="true"></i></span>
+                <span>
+                    <strong>OAuth 2.0</strong>
+                    <small>@(youtube.HasClientCredentials ? "Client credentials configured" : "Client ID and secret required")</small>
+                </span>
+            </div>
+            <div>
+                <span class="configuration-icon"><i class="fa fa-key" aria-hidden="true"></i></span>
+                <span>
+                    <strong>Public API key</strong>
+                    <small>@(youtube.HasApiKey ? "Configured" : "Optional when OAuth is used for Data API requests")</small>
+                </span>
+            </div>
+        </div>
+    </article>
+</section>

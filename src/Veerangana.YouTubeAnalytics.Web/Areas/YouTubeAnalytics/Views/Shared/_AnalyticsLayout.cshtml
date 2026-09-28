@@ -1,0 +1,173 @@
+@model DashboardShellViewModel
+@{
+    string currentPath = Request.Path;
+    string avatarInitial = string.IsNullOrWhiteSpace(Model.WorkspaceName)
+        ? "V"
+        : Model.WorkspaceName.Substring(0, 1).ToUpperInvariant();
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#17181d" />
+    <title>@Model.PageTitle | Veerangana Video Intelligence</title>
+    <link rel="stylesheet" href="@Url.Content("~/Content/vendor/bootstrap/css/bootstrap.min.css")" />
+    <link rel="stylesheet" href="@Url.Content("~/Content/vendor/font-awesome/css/font-awesome.min.css")" />
+    <link rel="stylesheet" href="@Url.Content("~/Content/dashboard.css")" />
+    <link rel="stylesheet" href="@Url.Content("~/Content/components.css")" />
+    @RenderSection("Styles", required: false)
+</head>
+<body class="analytics-app">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <aside class="sidebar" id="analytics-sidebar" aria-label="Analytics navigation">
+        <div class="sidebar__brand">
+            <span class="brand-mark" aria-hidden="true">V</span>
+            <span class="brand-copy">
+                <strong>Veerangana</strong>
+                <span>Video Intelligence</span>
+            </span>
+            <button class="icon-button sidebar__close js-sidebar-close" type="button" aria-label="Close navigation">
+                <i class="fa fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <nav class="sidebar__navigation">
+            <span class="sidebar__label">Analysis</span>
+            <ul class="navigation-list">
+                @foreach (NavigationItemViewModel item in Model.Navigation)
+                {
+                    <li>
+                        <a class="navigation-link js-preserve-filters @(item.IsActive ? "is-active" : string.Empty)"
+                           href="@Url.Action(item.Action, item.Controller, new { area = "YouTubeAnalytics" })"
+                           aria-current="@(item.IsActive ? "page" : null)">
+                            <i class="@item.IconCssClass" aria-hidden="true"></i>
+                            <span>@item.Label</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </nav>
+
+        <div class="sidebar__footer">
+            <span class="connection-dot @(Model.IsMockMode ? "is-demo" : "is-live")" aria-hidden="true"></span>
+            <span>
+                <strong>@(Model.IsMockMode ? "Demo dataset" : "Analytics database")</strong>
+                <small>@(Model.IsMockMode ? "Sample consumption data" : "SQL Server / Windows auth")</small>
+            </span>
+        </div>
+    </aside>
+
+    <button class="sidebar-overlay js-sidebar-close" type="button" aria-label="Close navigation"></button>
+
+    <div class="app-main">
+        <header class="topbar">
+            <div class="topbar__heading">
+                <button class="icon-button topbar__menu js-sidebar-open" type="button" aria-label="Open navigation" aria-controls="analytics-sidebar">
+                    <i class="fa fa-bars" aria-hidden="true"></i>
+                </button>
+                <div>
+                    <h1>@Model.PageTitle</h1>
+                    <p>@Model.PageDescription</p>
+                </div>
+            </div>
+
+            <div class="topbar__actions">
+                <div class="last-updated hidden-xs">
+                    <span>Last synchronized</span>
+                    <strong>@Model.LastUpdatedUtc.ToLocalTime().ToString("dd MMM yyyy, h:mm tt")</strong>
+                </div>
+                <button class="icon-button js-refresh-page" type="button" aria-label="Refresh analytics" data-toggle="tooltip" title="Refresh analytics">
+                    <i class="fa fa-refresh" aria-hidden="true"></i>
+                </button>
+                <div class="workspace-profile">
+                    @if (!string.IsNullOrWhiteSpace(Model.WorkspaceAvatarUrl))
+                    {
+                        <img src="@Model.WorkspaceAvatarUrl" alt="" />
+                    }
+                    else
+                    {
+                        <span class="workspace-avatar" aria-hidden="true">@avatarInitial</span>
+                    }
+                    <span class="workspace-profile__copy hidden-xs">
+                        <strong>@Model.WorkspaceName</strong>
+                        <small>Analysis workspace</small>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <section class="filter-bar" aria-label="Analytics filters">
+            <form action="@currentPath" method="get" class="filter-form" id="analytics-filter-form">
+                <div class="filter-control filter-control--date">
+                    <label for="date-range">Date range</label>
+                    <select class="form-control" id="date-range" name="range">
+                        @foreach (DateRangeOptionViewModel option in Model.Filters.DateRanges)
+                        {
+                            <option value="@option.Value" selected="@(option.Value == Model.Filters.DateRangeKey ? "selected" : null)">@option.Label</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="custom-date-fields @(Model.Filters.DateRangeKey == "custom" ? "is-visible" : string.Empty)" id="custom-date-fields">
+                    <div class="filter-control">
+                        <label for="start-date">From</label>
+                        <input class="form-control" id="start-date" name="start" type="date" value="@(Model.Filters.CustomStartDate.HasValue ? Model.Filters.CustomStartDate.Value.ToString("yyyy-MM-dd") : string.Empty)" />
+                    </div>
+                    <div class="filter-control">
+                        <label for="end-date">To</label>
+                        <input class="form-control" id="end-date" name="end" type="date" value="@(Model.Filters.CustomEndDate.HasValue ? Model.Filters.CustomEndDate.Value.ToString("yyyy-MM-dd") : string.Empty)" />
+                    </div>
+                </div>
+
+                <div class="filter-control">
+                    <label for="content-type">Content</label>
+                    <select class="form-control" id="content-type" name="contentType">
+                        @foreach (FilterOptionViewModel option in Model.Filters.ContentTypes)
+                        {
+                            <option value="@option.Value" selected="@(option.Value == Model.Filters.ContentType ? "selected" : null)">@option.Label</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="filter-control">
+                    <label for="country">Country</label>
+                    <select class="form-control" id="country" name="country">
+                        <option value="" selected="@(string.IsNullOrEmpty(Model.Filters.Country) ? "selected" : null)">All countries</option>
+                        <option value="IN" selected="@(Model.Filters.Country == "IN" ? "selected" : null)">India</option>
+                        <option value="US" selected="@(Model.Filters.Country == "US" ? "selected" : null)">United States</option>
+                        <option value="GB" selected="@(Model.Filters.Country == "GB" ? "selected" : null)">United Kingdom</option>
+                        <option value="CA" selected="@(Model.Filters.Country == "CA" ? "selected" : null)">Canada</option>
+                    </select>
+                </div>
+
+                <label class="compare-toggle" for="compare-period">
+                    <input type="hidden" name="compare" value="false" />
+                    <input id="compare-period" name="compare" type="checkbox" value="true" checked="@(Model.Filters.ComparePeriod ? "checked" : null)" />
+                    <span class="toggle-track" aria-hidden="true"><span></span></span>
+                    <span>Compare period</span>
+                </label>
+
+                <div class="filter-actions">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fa fa-check" aria-hidden="true"></i>
+                        Apply
+                    </button>
+                    <a class="btn btn-quiet" href="@currentPath">Reset</a>
+                </div>
+            </form>
+        </section>
+
+        <main class="content" id="main-content" tabindex="-1">
+            @RenderBody()
+        </main>
+    </div>
+
+    <script src="@Url.Content("~/Scripts/vendor/jquery-3.7.1.min.js")"></script>
+    <script src="@Url.Content("~/Scripts/vendor/bootstrap.min.js")"></script>
+    <script src="@Url.Content("~/Scripts/dashboard-shell.js")"></script>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,12 @@
+.vs/
+bin/
+obj/
+packages/
+artifacts/
+*.user
+*.suo
+*.cache
+*.log
+App_Data/*.mdf
+App_Data/*.ldf
+src/Veerangana.YouTubeAnalytics.Web/Web.Secrets.config

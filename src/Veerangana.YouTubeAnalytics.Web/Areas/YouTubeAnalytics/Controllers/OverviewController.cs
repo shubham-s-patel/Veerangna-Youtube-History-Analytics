@@ -1,0 +1,266 @@
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Diagnostics;
+using System.Globalization;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Web.Mvc;
+using Google;
+using Google.Apis.Auth.OAuth2.Responses;
+using Veerangana.YouTubeAnalytics.Infrastructure.Data;
+using Veerangana.YouTubeAnalytics.Models;
+using Veerangana.YouTubeAnalytics.Repositories;
+using Veerangana.YouTubeAnalytics.Services;
+using Veerangana.YouTubeAnalytics.ViewModels;
+
+namespace Veerangana.YouTubeAnalytics.Areas.YouTubeAnalytics.Controllers
+{
+    public sealed class OverviewController : AnalyticsControllerBase
+    {
+        private readonly IDashboardService _dashboardService;
+
+        public OverviewController()
+            : this(CreateDashboardService())
+        {
+        }
+
+        public OverviewController(IDashboardService dashboardService)
+        {
+            if (dashboardService == null) throw new ArgumentNullException("dashboardService");
+            _dashboardService = dashboardService;
+        }
+
+        public async Task<ActionResult> Index()
+        {
+            OverviewDashboardViewModel model = BuildShell<OverviewDashboardViewModel>(
+                "overview",
+                "Video usage overview",
+                "Understand how the video library creates attention, engagement and audience value.");
+
+            try
+            {
+                DashboardOverviewData data = await _dashboardService
+                    .GetOverviewAsync(model.Filters)
+                    .ConfigureAwait(false);
+
+                Populate(model, data);
+            }
+            catch (ConfigurationErrorsException exception)
+            {
+                Trace.TraceError("YouTube analytics configuration error: {0}", exception);
+                model.ErrorMessage = "YouTube access is not fully configured. Check the data source settings.";
+            }
+            catch (TokenResponseException exception)
+            {
+                Trace.TraceError("YouTube OAuth refresh failed: {0}", exception);
+                model.ErrorMessage = "YouTube authorization has expired or was revoked. Add a new refresh token.";
+            }
+            catch (GoogleApiException exception)
+            {
+                Trace.TraceError("YouTube API request failed: {0}", exception);
+                model.ErrorMessage = "YouTube could not return analytics right now. Verify API access and try again.";
+            }
+            catch (Exception exception)
+            {
+                Trace.TraceError("Overview analytics failed: {0}", exception);
+                model.ErrorMessage = "Analytics could not be loaded. Try refreshing the page in a moment.";
+            }
+
+            return View(model);
+        }
+
+        private static IDashboardService CreateDashboardService()
+        {
+            return new SqlDashboardService(
+                new AnalyticsFactRepository(new SqlConnectionFactory()));
+        }
+
+        private static void Populate(OverviewDashboardViewModel model, DashboardOverviewData data)
+        {
+            model.HasData = true;
+            model.WorkspaceName = data.Channel.Title;
+            model.WorkspaceAvatarUrl = data.Channel.AvatarUrl;
+            model.LastUpdatedUtc = data.Channel.LastSyncedAtUtc;
+            model.PeriodLabel = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:dd MMM yyyy} - {1:dd MMM yyyy}",
+                data.Period.StartDate,
+                data.Period.EndDate);
+
+            model.Metrics = BuildMetrics(data.Current, data.Previous);
+            model.Trend = data.Trend.Select(point => new TrendPointViewModel
+            {
+                Label = point.Date.ToString("dd MMM", CultureInfo.InvariantCulture),
+                Views = point.Views,
+                WatchTimeHours = Math.Round(point.WatchTimeMinutes / 60d, 2)
+            }).ToList();
+
+            model.TopVideos = data.TopVideos.Select(record => new TopVideoViewModel
+            {
+                Id = record.Video.Id,
+                Title = record.Video.Title,
+                ThumbnailUrl = record.Video.ThumbnailUrl,
+                PublishedDate = record.Video.PublishedAtUtc.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+                Duration = FormatDuration(record.Video.DurationSeconds),
+                Views = FormatNumber(record.Analytics.Views),
+                WatchTime = FormatHours(record.Analytics.WatchTimeMinutes),
+                Likes = FormatNumber(record.Analytics.Likes),
+                AudienceGained = FormatSignedNumber(record.Analytics.SubscribersGained)
+            }).ToList();
+
+            model.Insights = BuildInsights(data);
+        }
+
+        private static IList<MetricCardViewModel> BuildMetrics(
+            AnalyticsSummary current,
+            AnalyticsSummary previous)
+        {
+            return new List<MetricCardViewModel>
+            {
+                Metric("Video views", FormatNumber(current.Views), "Views generated by analyzed videos",
+                    "fa fa-eye", "metric-icon--rose", current.Views,
+                    previous == null ? (double?)null : previous.Views),
+                Metric("Watch time", FormatHours(current.WatchTimeMinutes), "Time spent watching analyzed videos",
+                    "fa fa-clock-o", "metric-icon--teal", current.WatchTimeMinutes,
+                    previous == null ? (double?)null : previous.WatchTimeMinutes),
+                Metric("Avg. view duration", FormatDuration(current.AverageViewDurationSeconds),
+                    "Average time watched per view", "fa fa-hourglass-half", "metric-icon--gold",
+                    current.AverageViewDurationSeconds,
+                    previous == null ? (double?)null : previous.AverageViewDurationSeconds),
+                Metric("Avg. percentage viewed",
+                    current.AverageViewPercentage.ToString("0.0", CultureInfo.InvariantCulture) + "%",
+                    "Average percentage of each video watched", "fa fa-percent", "metric-icon--blue",
+                    current.AverageViewPercentage,
+                    previous == null ? (double?)null : previous.AverageViewPercentage)
+            };
+        }
+
+        private static MetricCardViewModel Metric(
+            string label,
+            string value,
+            string tooltip,
+            string iconCssClass,
+            string accentCssClass,
+            double current,
+            double? previous)
+        {
+            string comparisonText = "Selected period";
+            string comparisonCssClass = "is-neutral";
+
+            if (previous.HasValue)
+            {
+                if (Math.Abs(previous.Value) < 0.0001)
+                {
+                    comparisonText = Math.Abs(current) < 0.0001 ? "No change" : "New activity";
+                    comparisonCssClass = Math.Abs(current) < 0.0001 ? "is-neutral" : "is-positive";
+                }
+                else
+                {
+                    double change = ((current - previous.Value) / Math.Abs(previous.Value)) * 100d;
+                    comparisonText = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "{0}{1:0.0}% vs previous",
+                        change > 0 ? "+" : string.Empty,
+                        change);
+                    comparisonCssClass = change > 0.05
+                        ? "is-positive"
+                        : change < -0.05 ? "is-negative" : "is-neutral";
+                }
+            }
+
+            return new MetricCardViewModel
+            {
+                Label = label,
+                Value = value,
+                Tooltip = tooltip,
+                IconCssClass = iconCssClass,
+                AccentCssClass = accentCssClass,
+                ComparisonText = comparisonText,
+                ComparisonCssClass = comparisonCssClass
+            };
+        }
+
+        private static IList<InsightViewModel> BuildInsights(DashboardOverviewData data)
+        {
+            var insights = new List<InsightViewModel>();
+            VideoUsageRecord topVideo = data.TopVideos.FirstOrDefault();
+
+            if (topVideo != null)
+            {
+                insights.Add(new InsightViewModel
+                {
+                    IconCssClass = "fa fa-bolt",
+                    AccentCssClass = "insight-item__icon--rose",
+                    Title = "Strongest attention driver",
+                    Description = topVideo.Video.Title + " generated " +
+                                  FormatNumber(topVideo.Analytics.Views) + " views in this period."
+                });
+            }
+
+            insights.Add(new InsightViewModel
+            {
+                IconCssClass = "fa fa-retweet",
+                AccentCssClass = "insight-item__icon--teal",
+                Title = "Viewing depth",
+                Description = "Viewers watched " +
+                              data.Current.AverageViewPercentage.ToString("0.0", CultureInfo.InvariantCulture) +
+                              "% of a video on average."
+            });
+
+            double engagementRate = data.Current.Views == 0
+                ? 0d
+                : ((data.Current.Likes + data.Current.Comments + data.Current.Shares) * 100d) /
+                  data.Current.Views;
+            insights.Add(new InsightViewModel
+            {
+                IconCssClass = "fa fa-comments-o",
+                AccentCssClass = "insight-item__icon--gold",
+                Title = "Active engagement",
+                Description = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Likes, comments and shares equal {0:0.00}% of period views.",
+                    engagementRate)
+            });
+
+            long netSubscribers = data.Current.SubscribersGained - data.Current.SubscribersLost;
+            insights.Add(new InsightViewModel
+            {
+                IconCssClass = "fa fa-users",
+                AccentCssClass = "insight-item__icon--blue",
+                Title = "Audience contribution",
+                Description = FormatSignedNumber(netSubscribers) +
+                              " net subscribers were associated with video usage."
+            });
+
+            return insights;
+        }
+
+        private static string FormatNumber(long value)
+        {
+            double absolute = Math.Abs((double)value);
+            if (absolute >= 1000000000d) return (value / 1000000000d).ToString("0.0", CultureInfo.InvariantCulture) + "B";
+            if (absolute >= 1000000d) return (value / 1000000d).ToString("0.0", CultureInfo.InvariantCulture) + "M";
+            if (absolute >= 1000d) return (value / 1000d).ToString("0.0", CultureInfo.InvariantCulture) + "K";
+            return value.ToString("N0", CultureInfo.GetCultureInfo("en-IN"));
+        }
+
+        private static string FormatSignedNumber(long value)
+        {
+            return (value > 0 ? "+" : string.Empty) + FormatNumber(value);
+        }
+
+        private static string FormatHours(double minutes)
+        {
+            return (minutes / 60d).ToString("N1", CultureInfo.GetCultureInfo("en-IN")) + " hrs";
+        }
+
+        private static string FormatDuration(double totalSeconds)
+        {
+            TimeSpan duration = TimeSpan.FromSeconds(Math.Max(0d, totalSeconds));
+            return duration.TotalHours >= 1d
+                ? string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}:{2:00}", (int)duration.TotalHours, duration.Minutes, duration.Seconds)
+                : string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}", duration.Minutes, duration.Seconds);
+        }
+    }
+}

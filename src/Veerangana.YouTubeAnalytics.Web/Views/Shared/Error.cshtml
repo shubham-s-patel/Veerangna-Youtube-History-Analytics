@@ -1,0 +1,22 @@
+@{
+    Layout = null;
+    Response.StatusCode = 500;
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Unable to load analytics</title>
+    <link rel="stylesheet" href="@Url.Content("~/Content/vendor/bootstrap/css/bootstrap.min.css")" />
+    <link rel="stylesheet" href="@Url.Content("~/Content/dashboard.css")" />
+</head>
+<body class="error-page">
+    <main class="error-panel">
+        <div class="error-panel__icon" aria-hidden="true">!</div>
+        <h1>We could not load the dashboard</h1>
+        <p>The request could not be completed. Please try again in a moment.</p>
+        <a class="btn btn-primary" href="@Url.Action("Index", "Overview", new { area = "YouTubeAnalytics" })">Return to overview</a>
+    </main>
+</body>
+</html>
